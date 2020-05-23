@@ -17,7 +17,7 @@ var (
 )
 
 type ReConn struct {
-	sync.RWMutex
+	mu sync.RWMutex
 
 	conn              wsConnection
 	errDialResp       *http.Response
@@ -106,8 +106,8 @@ func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
 }
 
 func (r *ReConn) readMessage() (messageType int, p []byte, err error) {
-	r.RLock()
-	defer r.RUnlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	if r.conn == nil {
 		return 0, nil, ErrNotConnected
@@ -135,8 +135,8 @@ func (r *ReConn) WriteMessage(messageType int, data []byte) error {
 }
 
 func (r *ReConn) writeMessage(messageType int, data []byte) error {
-	r.RLock()
-	defer r.RUnlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	if r.conn == nil {
 		return ErrNotConnected
@@ -146,8 +146,8 @@ func (r *ReConn) writeMessage(messageType int, data []byte) error {
 }
 
 func (r *ReConn) connect() (err error) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	defer func() {
 		if err == nil {
@@ -188,8 +188,8 @@ func (r *ReConn) Close() error {
 		return ErrNotDialed
 	}
 
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if r.conn == nil {
 		return ErrNotConnected
