@@ -40,47 +40,42 @@ type wsConnection interface {
 
 type SubscribeHandler func() error
 
-func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribeHandler SubscribeHandler) *ReConn {
+func New() *ReConn {
 	return &ReConn{
 		nextReconnectTime: time.Now(),
-		//
-		url:              url,
-		handshakeTimeout: handshakeTimeout,
-		reconnectTimeout: reconnectTimeout,
-		subscribeHandler: subscribeHandler,
 	}
 }
 
 // SetURL sets url. After 'Dial' call it does nothing
-func (r *ReConn) SetURL(url string) {
-	if r.dialed {
-		return
+func (r *ReConn) SetURL(url string) *ReConn {
+	if !r.dialed {
+		r.url = url
 	}
-	r.url = url
+	return r
 }
 
 // SetHandshakeTimeout sets handshake timeout. After 'Dial' call it does nothing
-func (r *ReConn) SetHandshakeTimeout(d time.Duration) {
-	if r.dialed {
-		return
+func (r *ReConn) SetHandshakeTimeout(d time.Duration) *ReConn {
+	if !r.dialed {
+		r.handshakeTimeout = d
 	}
-	r.handshakeTimeout = d
+	return r
 }
 
 // SetReconnectTimeout sets reconnect timeout. After 'Dial' call it does nothing
-func (r *ReConn) SetReconnectTimeout(d time.Duration) {
-	if r.dialed {
-		return
+func (r *ReConn) SetReconnectTimeout(d time.Duration) *ReConn {
+	if !r.dialed {
+		r.reconnectTimeout = d
 	}
-	r.reconnectTimeout = d
+	return r
 }
 
 // SetSubscribeHandler sets subscribe handler. After 'Dial' call it does nothing
-func (r *ReConn) SetSubscribeHandler(f SubscribeHandler) {
-	if r.dialed {
-		return
+func (r *ReConn) SetSubscribeHandler(f SubscribeHandler) *ReConn {
+	if !r.dialed {
+		r.subscribeHandler = f
 	}
-	r.subscribeHandler = f
+	return r
 }
 
 func (r *ReConn) Dial() error {
