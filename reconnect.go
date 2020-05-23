@@ -136,3 +136,16 @@ func (r *ReConn) newDialer() *websocket.Dialer {
 		HandshakeTimeout: r.handshakeTimeout,
 	}
 }
+
+func (r *ReConn) Close() error {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.conn == nil {
+		return ErrNotConnected
+	}
+
+	err := r.conn.Close()
+	r.conn = nil
+	return err
+}
