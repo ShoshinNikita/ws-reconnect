@@ -10,6 +10,9 @@ import (
 )
 
 var (
+	ErrNotDialed     = errors.New("method 'Dial' wasn't called")
+	ErrAlreadyDialed = errors.New("method 'Dial' was called already")
+
 	ErrNotConnected = errors.New("not connected")
 )
 
@@ -20,8 +23,9 @@ type ReConn struct {
 	errDialResp       *http.Response
 	nextReconnectTime time.Time
 
-	// read-only
+	// read-only after 'Dial' call
 
+	dialed           bool
 	url              string
 	handshakeTimeout time.Duration
 	reconnectTimeout time.Duration
@@ -34,7 +38,9 @@ type wsConnection interface {
 	Close() error
 }
 
-func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribeHandler func() error) *ReConn {
+type SubscribeHandler func() error
+
+func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribeHandler SubscribeHandler) *ReConn {
 	return &ReConn{
 		nextReconnectTime: time.Now(),
 		//
@@ -46,10 +52,19 @@ func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribe
 }
 
 func (r *ReConn) Dial() error {
+	if r.dialed {
+		return ErrAlreadyDialed
+	}
+	r.dialed = true
+
 	return r.connect()
 }
 
 func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
+	if !r.dialed {
+		return 0, nil, ErrNotDialed
+	}
+
 	messageType, data, readErr = r.readMessage()
 	if readErr == nil {
 		return messageType, data, nil
@@ -75,6 +90,10 @@ func (r *ReConn) readMessage() (messageType int, p []byte, err error) {
 }
 
 func (r *ReConn) WriteMessage(messageType int, data []byte) error {
+	if !r.dialed {
+		return ErrNotDialed
+	}
+
 	writeErr := r.writeMessage(messageType, data)
 	if writeErr == nil {
 		return nil
@@ -138,6 +157,10 @@ func (r *ReConn) newDialer() *websocket.Dialer {
 }
 
 func (r *ReConn) Close() error {
+	if !r.dialed {
+		return ErrNotDialed
+	}
+
 	r.Lock()
 	defer r.Unlock()
 
