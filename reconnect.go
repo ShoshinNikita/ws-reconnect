@@ -51,6 +51,38 @@ func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribe
 	}
 }
 
+// SetURL sets url. After 'Dial' call it does nothing
+func (r *ReConn) SetURL(url string) {
+	if r.dialed {
+		return
+	}
+	r.url = url
+}
+
+// SetHandshakeTimeout sets handshake timeout. After 'Dial' call it does nothing
+func (r *ReConn) SetHandshakeTimeout(d time.Duration) {
+	if r.dialed {
+		return
+	}
+	r.handshakeTimeout = d
+}
+
+// SetReconnectTimeout sets reconnect timeout. After 'Dial' call it does nothing
+func (r *ReConn) SetReconnectTimeout(d time.Duration) {
+	if r.dialed {
+		return
+	}
+	r.reconnectTimeout = d
+}
+
+// SetSubscribeHandler sets subscribe handler. After 'Dial' call it does nothing
+func (r *ReConn) SetSubscribeHandler(f SubscribeHandler) {
+	if r.dialed {
+		return
+	}
+	r.subscribeHandler = f
+}
+
 func (r *ReConn) Dial() error {
 	if r.dialed {
 		return ErrAlreadyDialed
