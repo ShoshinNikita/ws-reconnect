@@ -16,7 +16,7 @@ var (
 type ReConn struct {
 	sync.RWMutex
 
-	conn              *websocket.Conn
+	conn              wsConnection
 	errDialResp       *http.Response
 	nextReconnectTime time.Time
 
@@ -26,6 +26,12 @@ type ReConn struct {
 	handshakeTimeout time.Duration
 	reconnectTimeout time.Duration
 	subscribeHandler func() error
+}
+
+type wsConnection interface {
+	ReadMessage() (messageType int, p []byte, err error)
+	WriteMessage(messageType int, data []byte) error
+	Close() error
 }
 
 func New(url string, handshakeTimeout, reconnectTimeout time.Duration, subscribeHandler func() error) *ReConn {
