@@ -48,11 +48,18 @@ type Logger interface {
 
 type SubscribeHandler func(WsConnection) error
 
+// New creates a new instance of 'ReConn'. To set url, timeouts and etc. use methods 'Set...'
 func New() *ReConn {
 	return &ReConn{
+		log: NoopLogger{},
+		//
 		nextReconnectTime: time.Now(),
 	}
 }
+
+// ----------------------------------------------------
+// Setters
+// ----------------------------------------------------
 
 // SetURL sets url. After 'Dial' call it does nothing
 func (r *ReConn) SetURL(url string) *ReConn {
@@ -105,6 +112,10 @@ func (r *ReConn) Dial() error {
 
 	return r.connect()
 }
+
+// ----------------------------------------------------
+// Read/Write methods
+// ----------------------------------------------------
 
 func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
 	if !r.dialed {
@@ -213,6 +224,7 @@ func (r *ReConn) newDialer() *websocket.Dialer {
 	}
 }
 
+// Close closes connection
 func (r *ReConn) Close() error {
 	if !r.dialed {
 		return ErrNotDialed
@@ -231,3 +243,15 @@ func (r *ReConn) Close() error {
 	r.conn = nil
 	return err
 }
+
+// ----------------------------------------------------
+// Noop logger
+// ----------------------------------------------------
+
+type NoopLogger struct{}
+
+var _ Logger = (*NoopLogger)(nil)
+
+func (NoopLogger) Debug(msg string) {}
+func (NoopLogger) Info(msg string)  {}
+func (NoopLogger) Error(msg string) {}
