@@ -38,7 +38,7 @@ type WsConnection interface {
 	Close() error
 }
 
-type SubscribeHandler func() error
+type SubscribeHandler func(WsConnection) error
 
 func New() *ReConn {
 	return &ReConn{
@@ -167,8 +167,10 @@ func (r *ReConn) connect() (err error) {
 	if r.conn, r.errDialResp, err = r.newDialer().Dial(r.url, nil); err != nil {
 		return errors.Wrap(err, "dial error")
 	}
+
 	if r.subscribeHandler != nil {
-		if err := r.subscribeHandler(); err != nil {
+		// Pass raw connection
+		if err := r.subscribeHandler(r.conn); err != nil {
 			r.conn.Close()
 			return errors.Wrap(err, "subscribe error")
 		}
