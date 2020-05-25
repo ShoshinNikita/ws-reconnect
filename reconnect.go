@@ -2,6 +2,7 @@ package reconnect
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -22,7 +23,7 @@ type ReConn struct {
 	log Logger
 
 	conn              WsConnection
-	errDialResp       *http.Response
+	dialBody          []byte
 	nextReconnectTime time.Time
 
 	// read-only after 'Dial' call
@@ -179,8 +180,6 @@ func (r *ReConn) connect() (err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.log.Info("connect")
-
 	defer func() {
 		if err == nil {
 			return
@@ -197,8 +196,16 @@ func (r *ReConn) connect() (err error) {
 
 	<-time.After(time.Until(r.nextReconnectTime))
 
-	r.log.Debug("update connection")
-	if r.conn, r.errDialResp, err = r.newDialer().Dial(r.url, nil); err != nil {
+	r.log.Info(fmt.Sprintf("connect to '%s'", r.url))
+
+	var resp *http.Response
+	r.conn, resp, err = r.newDialer().Dial(r.url, nil)
+	if resp != nil && resp.Body != nil {
+		// Save response body
+		r.dialBody, _ = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+	}
+	if err != nil {
 		r.log.Error(fmt.Sprintf("dial error: %s", err))
 		return errors.Wrap(err, "dial error")
 	}
@@ -242,6 +249,15 @@ func (r *ReConn) Close() error {
 	err := r.conn.Close()
 	r.conn = nil
 	return err
+}
+
+func (r *ReConn) GetDialBody() []byte {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	bodyCopy := make([]byte, len(r.dialBody))
+	copy(bodyCopy, r.dialBody)
+	return bodyCopy
 }
 
 // ----------------------------------------------------
