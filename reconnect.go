@@ -12,7 +12,7 @@ import (
 
 var (
 	ErrNotDialed     = errors.New("method 'Dial' wasn't called")
-	ErrAlreadyDialed = errors.New("method 'Dial' was called already")
+	ErrAlreadyDialed = errors.New("method 'Dial' was already called")
 
 	ErrNotConnected = errors.New("not connected")
 )
@@ -195,20 +195,20 @@ func (r *ReConn) connect() (err error) {
 		r.conn = nil
 	}
 
-	<-time.After(r.nextReconnectTime.Sub(time.Now()))
+	<-time.After(time.Until(r.nextReconnectTime))
 
 	r.log.Debug("update connection")
 	if r.conn, r.errDialResp, err = r.newDialer().Dial(r.url, nil); err != nil {
-		r.log.Error(fmt.Sprint("dial error:", err))
+		r.log.Error(fmt.Sprintf("dial error: %s", err))
 		return errors.Wrap(err, "dial error")
 	}
 
 	if r.subscribeHandler != nil {
 		r.log.Debug("call subscribe handler")
 
-		// Pass raw connection
+		// Pass raw connection to prevent deadlock
 		if err := r.subscribeHandler(r.conn); err != nil {
-			r.log.Error(fmt.Sprint("subscribe error:", err))
+			r.log.Error(fmt.Sprintf("subscribe error: %s", err))
 
 			r.conn.Close()
 			return errors.Wrap(err, "subscribe error")
