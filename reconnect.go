@@ -1,6 +1,7 @@
 package reconnect
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -16,6 +16,13 @@ var (
 	ErrAlreadyDialed = errors.New("method 'Dial' was already called")
 
 	ErrNotConnected = errors.New("not connected")
+
+	// ErrDial is used when 'websocket.Dial' returns an error
+	ErrDial = errors.New("dial error")
+	// ErrSubscribe is used when subscribe handler returns an error
+	ErrSubscribe = errors.New("subscribe error")
+	// ErrReconnect is used when reconnection wasn't successful
+	ErrReconnect = errors.New("reconnect error")
 )
 
 type ReConn struct {
@@ -130,7 +137,7 @@ func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
 
 	// Try to reconnect
 	if recErr := r.connect(); recErr != nil {
-		return messageType, data, errors.Errorf("original error: '%s', reconnect error: '%s'", readErr, recErr)
+		return messageType, data, fmt.Errorf("%w: original error: '%s', reconnect error: '%s'", ErrReconnect, readErr, recErr)
 	}
 
 	return messageType, data, readErr
@@ -159,7 +166,7 @@ func (r *ReConn) WriteMessage(messageType int, data []byte) error {
 
 	// Try to reconnect
 	if recErr := r.connect(); recErr != nil {
-		return errors.Errorf("original error: '%s', reconnect error: '%s'", writeErr, recErr)
+		return fmt.Errorf("%w: original error: '%s', reconnect error: '%s'", ErrReconnect, writeErr, recErr)
 	}
 
 	return writeErr
@@ -206,8 +213,9 @@ func (r *ReConn) connect() (err error) {
 		resp.Body.Close()
 	}
 	if err != nil {
-		r.log.Error(fmt.Sprintf("dial error: %s", err))
-		return errors.Wrap(err, "dial error")
+		err = fmt.Errorf("%w: %s", ErrDial, err)
+		r.log.Error(err.Error())
+		return err
 	}
 
 	if r.subscribeHandler != nil {
@@ -215,10 +223,11 @@ func (r *ReConn) connect() (err error) {
 
 		// Pass raw connection to prevent deadlock
 		if err := r.subscribeHandler(r.conn); err != nil {
-			r.log.Error(fmt.Sprintf("subscribe error: %s", err))
+			err = fmt.Errorf("%w: %s", ErrSubscribe, err)
+			r.log.Error(err.Error())
 
 			r.conn.Close()
-			return errors.Wrap(err, "subscribe error")
+			return err
 		}
 	}
 
