@@ -1,6 +1,7 @@
 package reconnect
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -17,7 +18,8 @@ var (
 )
 
 type ReConn struct {
-	mu sync.RWMutex
+	mu  sync.RWMutex
+	log Logger
 
 	conn              WsConnection
 	errDialResp       *http.Response
@@ -36,6 +38,12 @@ type WsConnection interface {
 	ReadMessage() (messageType int, p []byte, err error)
 	WriteMessage(messageType int, data []byte) error
 	Close() error
+}
+
+type Logger interface {
+	Debug(msg string)
+	Info(msg string)
+	Error(msg string)
 }
 
 type SubscribeHandler func(WsConnection) error
@@ -74,6 +82,17 @@ func (r *ReConn) SetReconnectTimeout(d time.Duration) *ReConn {
 func (r *ReConn) SetSubscribeHandler(f SubscribeHandler) *ReConn {
 	if !r.dialed {
 		r.subscribeHandler = f
+	}
+	return r
+}
+
+// SetLogger sets logger. After 'Dial' call it does nothing
+func (r *ReConn) SetLogger(log Logger) *ReConn {
+	if !r.dialed {
+		if log == nil {
+			log = NoopLogger{}
+		}
+		r.log = log
 	}
 	return r
 }
@@ -149,6 +168,8 @@ func (r *ReConn) connect() (err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.log.Info("connect")
+
 	defer func() {
 		if err == nil {
 			return
@@ -157,6 +178,7 @@ func (r *ReConn) connect() (err error) {
 	}()
 
 	if r.conn != nil {
+		r.log.Debug("close previous connection")
 		// Close previous connection
 		r.conn.Close()
 		r.conn = nil
@@ -164,13 +186,19 @@ func (r *ReConn) connect() (err error) {
 
 	<-time.After(r.nextReconnectTime.Sub(time.Now()))
 
+	r.log.Debug("update connection")
 	if r.conn, r.errDialResp, err = r.newDialer().Dial(r.url, nil); err != nil {
+		r.log.Error(fmt.Sprint("dial error:", err))
 		return errors.Wrap(err, "dial error")
 	}
 
 	if r.subscribeHandler != nil {
+		r.log.Debug("call subscribe handler")
+
 		// Pass raw connection
 		if err := r.subscribeHandler(r.conn); err != nil {
+			r.log.Error(fmt.Sprint("subscribe error:", err))
+
 			r.conn.Close()
 			return errors.Wrap(err, "subscribe error")
 		}
@@ -196,6 +224,8 @@ func (r *ReConn) Close() error {
 	if r.conn == nil {
 		return ErrNotConnected
 	}
+
+	r.log.Debug("close connection")
 
 	err := r.conn.Close()
 	r.conn = nil
