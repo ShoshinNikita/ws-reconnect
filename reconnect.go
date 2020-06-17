@@ -16,6 +16,7 @@ var (
 	ErrAlreadyDialed = errors.New("method 'Dial' was already called")
 
 	ErrNotConnected = errors.New("not connected")
+	ErrConnClosed   = errors.New("closed")
 
 	// ErrDial is used when 'websocket.Dial' returns an error
 	ErrDial = errors.New("dial error")
@@ -118,7 +119,7 @@ func (r *ReConn) Dial() error {
 	}
 	r.dialed = true
 
-	return r.connect()
+	return r.connect(true)
 }
 
 // ----------------------------------------------------
@@ -136,7 +137,11 @@ func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
 	}
 
 	// Try to reconnect
-	if recErr := r.connect(); recErr != nil {
+	if recErr := r.connect(false); recErr != nil {
+		if recErr == ErrConnClosed {
+			return messageType, data, readErr
+		}
+
 		return messageType, data, fmt.Errorf("%w: original error: '%s', reconnect error: '%s'", ErrReconnect, readErr, recErr)
 	}
 
@@ -165,7 +170,11 @@ func (r *ReConn) WriteMessage(messageType int, data []byte) error {
 	}
 
 	// Try to reconnect
-	if recErr := r.connect(); recErr != nil {
+	if recErr := r.connect(false); recErr != nil {
+		if recErr == ErrConnClosed {
+			return writeErr
+		}
+
 		return fmt.Errorf("%w: original error: '%s', reconnect error: '%s'", ErrReconnect, writeErr, recErr)
 	}
 
@@ -183,9 +192,14 @@ func (r *ReConn) writeMessage(messageType int, data []byte) error {
 	return r.conn.WriteMessage(messageType, data)
 }
 
-func (r *ReConn) connect() (err error) {
+func (r *ReConn) connect(firstTime bool) (err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if !firstTime && r.conn == nil {
+		// Connection was closed
+		return ErrConnClosed
+	}
 
 	defer func() {
 		if err == nil {
@@ -255,9 +269,9 @@ func (r *ReConn) Close() error {
 
 	r.log.Debug("close connection")
 
-	err := r.conn.Close()
+	conn := r.conn
 	r.conn = nil
-	return err
+	return conn.Close()
 }
 
 func (r *ReConn) GetDialBody() []byte {
