@@ -34,6 +34,8 @@ type ReConn struct {
 	dialBody          []byte
 	nextReconnectTime time.Time
 
+	closed *atomicBool
+
 	// read-only after 'Dial' call
 
 	dialed           bool
@@ -63,6 +65,8 @@ func New() *ReConn {
 		log: NoopLogger{},
 		//
 		nextReconnectTime: time.Now(),
+		//
+		closed: newAtomicBool(),
 	}
 }
 
@@ -119,7 +123,7 @@ func (r *ReConn) Dial() error {
 	}
 	r.dialed = true
 
-	return r.connect(true)
+	return r.connect()
 }
 
 // ----------------------------------------------------
@@ -137,7 +141,7 @@ func (r *ReConn) ReadMessage() (messageType int, data []byte, readErr error) {
 	}
 
 	// Try to reconnect
-	if recErr := r.connect(false); recErr != nil {
+	if recErr := r.connect(); recErr != nil {
 		if recErr == ErrConnClosed {
 			return messageType, data, readErr
 		}
@@ -170,7 +174,7 @@ func (r *ReConn) WriteMessage(messageType int, data []byte) error {
 	}
 
 	// Try to reconnect
-	if recErr := r.connect(false); recErr != nil {
+	if recErr := r.connect(); recErr != nil {
 		if recErr == ErrConnClosed {
 			return writeErr
 		}
@@ -192,11 +196,11 @@ func (r *ReConn) writeMessage(messageType int, data []byte) error {
 	return r.conn.WriteMessage(messageType, data)
 }
 
-func (r *ReConn) connect(firstTime bool) (err error) {
+func (r *ReConn) connect() (err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !firstTime && r.conn == nil {
+	if r.closed.Get() {
 		// Connection was closed
 		return ErrConnClosed
 	}
@@ -269,6 +273,7 @@ func (r *ReConn) Close() error {
 
 	r.log.Debug("close connection")
 
+	r.closed.Set(true)
 	conn := r.conn
 	r.conn = nil
 	return conn.Close()
