@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"sync"
 	"time"
 
@@ -38,10 +37,14 @@ type ReConn struct {
 
 	// read-only after 'Dial' call
 
-	dialed           bool
-	url              string
+	dialed bool
+
+	url string
+
 	handshakeTimeout time.Duration
 	reconnectTimeout time.Duration
+
+	pingHandler      PingHandler
 	subscribeHandler SubscribeHandler
 }
 
@@ -57,7 +60,10 @@ type Logger interface {
 	Error(msg string)
 }
 
-type SubscribeHandler func(WsConnection) error
+type (
+	PingHandler      func(msg string) error
+	SubscribeHandler func(WsConnection) error
+)
 
 // New creates a new instance of 'ReConn'. To set url, timeouts and etc. use methods 'Set...'
 func New() *ReConn {
@@ -94,6 +100,14 @@ func (r *ReConn) SetHandshakeTimeout(d time.Duration) *ReConn {
 func (r *ReConn) SetReconnectTimeout(d time.Duration) *ReConn {
 	if !r.dialed {
 		r.reconnectTimeout = d
+	}
+	return r
+}
+
+// SetPingHandler sets ping handler. After 'Dial' call it does nothing
+func (r *ReConn) SetPingHandler(f PingHandler) *ReConn {
+	if !r.dialed {
+		r.pingHandler = f
 	}
 	return r
 }
@@ -223,8 +237,7 @@ func (r *ReConn) connect() (err error) {
 
 	r.log.Info(fmt.Sprintf("connect to '%s'", r.url))
 
-	var resp *http.Response
-	r.conn, resp, err = r.newDialer().Dial(r.url, nil)
+	conn, resp, err := r.newDialer().Dial(r.url, nil)
 	if resp != nil && resp.Body != nil {
 		// Save response body
 		r.dialBody, _ = ioutil.ReadAll(resp.Body)
@@ -236,18 +249,24 @@ func (r *ReConn) connect() (err error) {
 		return err
 	}
 
+	if r.pingHandler != nil {
+		conn.SetPingHandler(r.pingHandler)
+	}
+
 	if r.subscribeHandler != nil {
 		r.log.Debug("call subscribe handler")
 
 		// Pass raw connection to prevent deadlock
-		if err := r.subscribeHandler(r.conn); err != nil {
+		if err := r.subscribeHandler(conn); err != nil {
 			err = fmt.Errorf("%w: %s", ErrSubscribe, err)
 			r.log.Error(err.Error())
 
-			r.conn.Close()
+			conn.Close()
 			return err
 		}
 	}
+
+	r.conn = conn
 
 	return nil
 }
