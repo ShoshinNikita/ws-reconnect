@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"sync"
 	"time"
 
@@ -39,7 +40,8 @@ type ReConn struct {
 
 	dialed bool
 
-	url string
+	url    string
+	header http.Header
 
 	handshakeTimeout time.Duration
 	reconnectTimeout time.Duration
@@ -84,6 +86,14 @@ func New() *ReConn {
 func (r *ReConn) SetURL(url string) *ReConn {
 	if !r.dialed {
 		r.url = url
+	}
+	return r
+}
+
+// SetHeader sets header for '(*websocket.Conn).Dial' call. After 'Dial' call it does nothing
+func (r *ReConn) SetHeader(header http.Header) *ReConn {
+	if !r.dialed {
+		r.header = header
 	}
 	return r
 }
@@ -237,7 +247,7 @@ func (r *ReConn) connect() (err error) {
 
 	r.log.Info(fmt.Sprintf("connect to '%s'", r.url))
 
-	conn, resp, err := r.newDialer().Dial(r.url, nil)
+	conn, resp, err := r.newDialer().Dial(r.url, r.header)
 	if resp != nil && resp.Body != nil {
 		// Save response body
 		r.dialBody, _ = ioutil.ReadAll(resp.Body)
