@@ -194,6 +194,9 @@ func (r *ReConn) WriteMessage(messageType int, data []byte) error {
 
 	writeErr := r.writeMessage(messageType, data)
 	if writeErr == nil {
+		if messageType == websocket.CloseMessage {
+			r.closed.Set(true)
+		}
 		return nil
 	}
 
